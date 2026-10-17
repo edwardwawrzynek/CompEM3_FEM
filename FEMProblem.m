@@ -6,48 +6,123 @@ classdef FEMProblem
         gamma % neumann bc term
         kappa_n % neumann bc term
         f % forcing
-        geo_a % inner radius of domain
-        geo_b % outer radius of domain
+
+        geometry % geometry of the problem
+        dirEdges % dirichlet BC edeges
+        dirVals  % dirichlet BC values
 
         model % pde model object
         mesh % pde mesh object
         K % system matrix
         b % right hand side
+        Cap % capacitance
     end
+
     methods
-        function obj = FEMProblem(ep_r_center, beta, gamma, kappa_n, f, geo_a, geo_b)
+
+        function obj = FEMProblem(ep_r_center, beta, gamma, kappa_n, f)
             obj.ep_r_center = ep_r_center;
             obj.beta = beta;
             obj.gamma = gamma;
             obj.kappa_n = kappa_n;
             obj.f = f;
-            obj.geo_a = geo_a;
-            obj.geo_b = geo_b;
         end
-        
-        % create the geometry and mesh the problem
-        function obj = createMesh(obj, h)
-            % geometry codes for pde toolbox
-            circle_code=1;
-            circle_footer=[];
+
+        function obj = makeRing(obj, geo_a, geo_b)
+        % MAKERING  Build a ring and attach it to the model.
+        % obj = obj.makeRing(geo_a, geo_b, swp_angle)
+        %
+        % INPUTS
+        % geo_a      inner radius [m]
+        % geo_b      outer radius [m]
+        %
+        % OUTPUTS
+        % obj        FEMProblem object with updated obj.model and obj.geometry
+
+            circle_code = 1;
+            circle_footer = [];
 
             % create model
             obj.model = createpde();
+
             % outer circle (boundary)
-            B = [circle_code, 0, 0, obj.geo_b, circle_footer]';
+            % [code, x-center, y-center, radius, footer]
+            B = [circle_code, 0, 0, geo_b, circle_footer]';
+
             % inner circle (scatterer)
-            A = [circle_code, 0, 0, obj.geo_a, circle_footer]';
-            set_names = ['B'; 'A']';
+            % [code, x-center, y-center, radius, footer]
+            A = [circle_code, 0, 0, geo_a, circle_footer]';
+
             % TODO: add parameter to mesh and tag (rather than exclude) scatterer (for dielectric case)
+            set_names = ['B'; 'A']';
             set_formula = 'B - A';
 
             % build geometry
             gd = [B A];
             g = decsg(gd, set_formula, set_names);
-            geometryFromEdges(obj.model, g);
+            obj.geometry = geometryFromEdges(obj.model, g);
+        end
+
+        function obj = makeSlice(obj, geo_a, geo_b, swp_angle)
+        % MAKESLICE  Build a wedge (slice) and attach it to the model.
+        % obj = obj.makeSlice(geo_a, geo_b, swp_angle)
+        %
+        % INPUTS
+        % geo_a      inner radius [m]
+        % geo_b      outer radius [m]
+        % swp_angle  sweep angle of the slice [rad], 0 < swp_angle <= 2*pi
+        %
+        % OUTPUTS
+        % obj        FEMProblem object with updated obj.model and obj.geometry
+
+            circle_code = 1;
+            polygon_code = 2;
             
-            % mesh
-            obj.mesh = generateMesh(obj.model, Hmax=h*2, Hmin=h, Hgrad=2, GeometricOrder="linear");
+            % create model
+            obj.model = createpde();
+
+            % mask to turn the ring into a wedge
+            vertices = 6;
+            vert_x = [0; 2*geo_b*cos(linspace(0,swp_angle,5))'];
+            vert_y = [0; 2*geo_b*sin(linspace(0,swp_angle,5))'];
+            M = [polygon_code; vertices; vert_x; vert_y];
+            circle_footer = zeros(1, 2*vertices-2); % adjust the circle footer.
+
+            % outer circle (boundary)
+            % [circle, x-center, y-center, radius, footer]
+            B = [circle_code, 0, 0, geo_b, circle_footer]';
+
+            % inner circle (scatterer)
+            % [circle, x-center, y-center, radius, footer]
+            A = [circle_code, 0, 0, geo_a, circle_footer]';
+
+            % TODO: add parameter to mesh and tag (rather than exclude) scatterer (for dielectric case)
+            set_names = ['B'; 'A'; 'M']';
+            set_formula = '(B - A) * M';
+
+            % build geometry
+            gd = [B A M];
+            g = decsg(gd, set_formula, set_names);
+            obj.geometry = geometryFromEdges(obj.model, g);
+        end
+        
+        function obj = createMesh(obj, h)
+        % CREATEMESH Mesh obj.geometry and attach the mesh to the model.
+        % Requires obj.geometry to be non-empty.
+        % obj = obj.creatMesh(h)
+        %
+        % INPUTS
+        % h          target element size [m] sets Hmin = h and Hmax = 2*h
+        %
+        % OUTPUTS
+        % obj        FEMproblem object with updated obj.mesh
+
+            if isempty(obj.geometry)
+                disp("Meshing Error: Problem geometry needs to be defined before meshing.");
+            else
+                % mesh after creating the geometry
+                obj.mesh = generateMesh(obj.model, Hmax=h*2, Hmin=h, Hgrad=2, GeometricOrder="linear");
+            end
         end
         
         % plot the mesh
@@ -64,7 +139,8 @@ classdef FEMProblem
             Nnod = length(pos);
             Ntri = length(n);
             
-            figure();
+            % figure(); % this adds a figure window we do not need for the
+            % manner in which it is called
             pdemesh(obj.model);
             if doLabels
                 for i=1:Nnod
@@ -113,26 +189,85 @@ classdef FEMProblem
             phi_l = (abc(l,1) + abc(l,2)*x + abc(l,3)*y) / 2 / delta_e;
         end
 
-        % get a list of nodes which are subject to dirichlet coditions and
-        % their values
+        function obj = setDirichletBC(obj, edges, val)
+        % SETDIRICHLETBC Set Dirichlet boundary conditions
+        % obj = obj.setDirichletBC(edges, val)
+        %
+        % INPUTS
+        % edges      the edges to which the boundary condition applies
+        % val        the value of the boundary condition
+        %
+        % OUTPUTS
+        % obj        FEMproblem object with updated obj.dirEdges and
+        %            obj.dirVals
+
+            n = numel(edges);
+            obj.dirEdges(end+1:end+n) = edges;
+            obj.dirVals(end+1:end+n) = val;
+        end
+
         function [dNodes, dVals] = dirichletNodes(obj)
-            % outside has potential at 1
-            boundaryEdges1 = findNodes(obj.mesh, "region", "Edge", 1:4);
-            dNodes1 = unique(boundaryEdges1);
-            dVals1 = ones(size(dNodes1));
-            % inside has potential at 0
-            boundaryEdges2 = findNodes(obj.mesh, "region", "Edge", 5:8);
-            dNodes2 = unique(boundaryEdges2);
-            dVals2 = zeros(size(dNodes1));
-            
-            dNodes = [dNodes1 dNodes2].';
-            dVals = [dVals1 dVals2].';
+        % DIRICHLETNODES Catalogue the nodes and values corresponding to 
+        % edges with dirichlet boundary conditions.
+        % obj = obj.dirichletNodes()
+        %
+        % INPUTS
+        % 
+        % OUTPUTS
+        % dNodes     the nodes with a dirichlet boundary condition
+        % dVals      the value of the dirichlet boundary condition
+        %            corresponding to each node in dNodes
+
+            % initialize
+            dNodes = [];
+            dVals  = [];
+            for d = 1:numel(obj.dirEdges) % sweep over dirichlet assigned edeges
+                nodes  = unique(findNodes(obj.mesh, "region", "Edge", obj.dirEdges(d)));
+                dNodes = [dNodes; nodes(:)]; % add all unique nodes
+                dVals  = [dVals;  obj.dirVals(d)*ones(numel(nodes),1)]; % add the value
+            end
+        end
+
+        function alpha_e = alphaElem(obj, e)
+        % ALPHA_E assign values in the scenario of radially variable or 
+        % constant obj.ep_r_center.
+        % alpha_e = obj.alphaElem(e)
+        %
+        % INPUTS
+        % e          the element for which obj.ep_r_center is to be
+        %            evaluated
+        %
+        % OUTPUTS
+        % alpha_e    if obj.ep_r_center is a function handle this is the
+        %            function evaluated at the centroid of the element cell. If it is
+        %            a constant it is set equal to that value.
+
+            if isa(obj.ep_r_center, 'function_handle') 
+
+                elems = obj.mesh.Elements; % elements
+                n = obj.mesh.Nodes; % nodes
+                node_indices = elems(:,e); % indices for the element
+
+                % fine the centroid
+                centroidX = (n(1, node_indices(1)) + n(1, node_indices(1)) ...
+                    + n(1, node_indices(1))) / 3;
+                centroidY = (n(2, node_indices(1)) + n(2, node_indices(1)) ...
+                    + n(2, node_indices(1))) / 3;
+
+                % calculate the radius
+                centroid_rho = sqrt(centroidX^2 + centroidY^2);
+                
+                % evaluate
+                alpha_e = obj.ep_r_center(centroid_rho);
+            else
+                alpha_e = obj.ep_r_center; % constant
+            end
         end
 
         % evaluate K_alpha contributions
         function obj = assembleKalpha(obj)
             elems = obj.mesh.Elements;
-            for e=1:length(elems)
+            for e=1:size(elems,2)
                 % get nodes of element
                 node_indices = elems(:,e);
                 delta_e = obj.areaElem(e);
@@ -142,11 +277,39 @@ classdef FEMProblem
                         % get corresponding indices in system matrix
                         i = node_indices(l); j = node_indices(k);
                         
-                        % inner product of grad of l-th and k-th elements
-                        % on e
-                        obj.K(i,j) = obj.K(i,j) + 1/(4*delta_e) * (abc(l,2)*abc(k,2) + abc(l,3)*abc(k,3));
+                        % inner product of grad of l-th and k-th elements on e
+
+                        % UPDATE: alpha_e is used in place of
+                        % obj.ep_r_center to handle cases in which
+                        % ep_r_center is varied radially (e.g. test case 3).
+
+                        alpha_e = obj.alphaElem(e);
+                        obj.K(i,j) = obj.K(i,j) ...
+                            + alpha_e * (1/(4*delta_e) * (abc(l,2)*abc(k,2) + abc(l,3)*abc(k,3)));
                     end
                 end
+            end
+        end
+
+        function obj = assembleKbeta(obj)
+        % ASSEMBLEKBETA Add K_beta to the K matrix
+        % obj = obj.assembleKbeta()
+        %
+        % INPUTS
+        %
+        % OUTPUTS
+        % obj        FEMproblem pobject with obj.K additively updated with
+        %            the K_beta term
+
+            elems = obj.mesh.Elements;
+            for e=1:size(elems,2) % for each element
+
+                idx = elems(:,e); % get the nodes from element e
+                delta_e = obj.areaElem(e); % area of element e
+                        
+                % product of l-th and k-th elements on e
+                obj.K(idx,idx) = obj.K(idx,idx) ...
+                    + obj.beta * delta_e/12 * [2, 1, 1; 1, 2, 1; 1, 1, 2];
             end
         end
 
@@ -172,11 +335,26 @@ classdef FEMProblem
 
             % assemble terms in matrix
             obj = obj.assembleKalpha();
+            obj = obj.assembleKbeta();
 
             obj = obj.correctDirichlet();
 
             phi = obj.K \ obj.b;
             pdeplot(obj.mesh, XYData=phi, ColorMap="jet");
+
+            % Calculate capacitance:
+            elems = obj.mesh.Elements;
+            [gradX, gradY] = pdegrad(obj.mesh.Nodes, elems, phi); % calculate gradients
+
+            W = 0; % electric energy
+            for e = 1:size(elems,2)
+                alpha_e = obj.alphaElem(e); % update obj.ep_r_center for element e
+                W = W + alpha_e * obj.areaElem(e) * (gradX(e)^2 + gradY(e)^2);
+            end
+
+            % Capacitance (calculate and save)
+            obj.Cap = W * 8.85 * 1e-12; % F/m per Volt  
         end
+
     end
 end
