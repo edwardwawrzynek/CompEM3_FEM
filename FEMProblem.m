@@ -10,6 +10,9 @@ classdef FEMProblem
         geometry % geometry of the problem
         dirEdges % dirichlet BC edeges
         dirVals  % dirichlet BC values
+        neuEdges % Neumann BC edges
+        neuVals % Neumann BC values
+        neuGammas % Neumann BC values
 
         neumEdges  % edges on which to apply neumann boundary
         neumGamma % neumann BC gamma term
@@ -19,9 +22,7 @@ classdef FEMProblem
         mesh % pde mesh object
         K % system matrix
         b % right hand side
-        Cap % capacitance
-
-        phi % nodal solution
+        phi % solution matrix
     end
 
     methods
@@ -113,6 +114,39 @@ classdef FEMProblem
             obj.geometry = geometryFromEdges(obj.model, g);
         end
         
+        function obj = makeRect(obj, h, w)
+        % MAKERECT  Build a rectangle and attach it to the model.
+        % obj = obj.makeRect(h, w)
+        %
+        % INPUTS
+        % h          height in y-axis direction [m]
+        % w          width in x-axis direction [m]
+        %
+        % OUTPUTS
+        % obj        FEMProblem object with updated obj.model and obj.geometry
+
+            polygon_code = 2;
+
+            % create model
+            obj.model = createpde();
+
+            % rectangle (boundary), centered at the origin
+            % [polygon, number of vertices, x-coordinates, y-coordinates]
+            vertices = 4;
+            vert_x = [-w/2;  w/2; w/2; -w/2];
+            vert_y = [-h/2; -h/2; h/2;  h/2];
+            R = [polygon_code; vertices; vert_x; vert_y];
+
+            % build geometry
+            set_names = 'R';
+            set_formula = 'R';
+
+            % build geometry
+            gd = R;
+            g = decsg(gd, set_formula, set_names);
+            obj.geometry = geometryFromEdges(obj.model, g);
+        end
+
         function obj = createMesh(obj, h)
         % CREATEMESH Mesh obj.geometry and attach the mesh to the model.
         % Requires obj.geometry to be non-empty.
@@ -213,6 +247,22 @@ classdef FEMProblem
             obj.dirVals(end+1:end+n) = val;
         end
 
+        function obj = setNeumannBC(obj, edges)
+        % SETNEUMANNBC Set Neumann boundary conditions
+        % obj = obj.setNeumannBC(edges)
+        %
+        % INPUTS
+        % edges      the edges to which the boundary condition applies
+        %
+        % OUTPUTS
+        % obj        FEMproblem object with updated obj.neuEdges and
+        %            obj.neuVals
+
+            n = numel(edges);
+            obj.neuEdges(end+1:end+n) = edges;
+            obj.neuVals(end+1:end+n) = obj.kappa_n;
+        end
+
         function [dNodes, dVals] = dirichletNodes(obj)
         % DIRICHLETNODES Catalogue the nodes and values corresponding to 
         % edges with dirichlet boundary conditions.
@@ -235,52 +285,26 @@ classdef FEMProblem
             end
         end
 
-        function obj = setNeumannBC(obj, edges, gamma, kappa_n)
-            % SETNEUMANNBC Set Neumann boundary conditions
-            % obj = obj.setNeumannBC(edges, val)
-            %
-            % INPUTS
-            % edges      the edges to which the boundary condition applies
-            % gamma      the value of gamma on the edge
-            % kappa_n    the forcing term to apply (a function of position) 
-            %
-            % OUTPUTS
-            % obj        FEMproblem object with updated obj.neumEdges and
-            %            obj.neumGamma and obj.neumKappa
-
-            n = numel(edges);
-            obj.neumEdges(end+1:end+n) = edges;
-            obj.neumGamma(end+1:end+n) = gamma;
-            for i=1:n
-                obj.neumKappa{end+1} = kappa_n;
-            end
-        end
-
-        function [nNodes, nGamma, nKappa] = neumannNodes(obj)
-            % NEUMANNNODES Catalogue the nodes and values corresponding to 
-            % edges with neumann boundary conditions.
-            % obj = obj.neumannNodes()
-            %
-            % INPUTS
-            % 
-            % OUTPUTS
-            % nNodes     the nodes with a neumann boundary condition
-            % nGamma     the gamma of the neumann boundary condition
-            %            corresponding to each node in nNodes
-            % nKappa     the neumann forcing function on each node in
-            % nNodes
+        function [nNodes, nVals] = neumannNodes(obj)
+        % NEUMANNNODES Catalogue the nodes, and values corresponding to 
+        % edges with neumann boundary conditions.
+        % obj = obj.neumannNodes()
+        %
+        % INPUTS
+        % 
+        % OUTPUTS
+        % nNodes     the nodes with a neumann boundary condition
+        % nVals      the value of the neumann boundary condition
+        %            corresponding to each node in nNodes
 
             % initialize
             nNodes = [];
-            nGamma = [];
-            nKappa = [];
-            for d = 1:numel(obj.neumEdges) % sweep over neumann assigned edeges
-                nodes  = unique(findNodes(obj.mesh, "region", "Edge", obj.neumEdges(d)));
-                nNodes = [nNodes; nodes(:)]; % add all unique nodes
-                nGamma  = [nGamma;  obj.neumGamma(d)*ones(numel(nodes),1)]; % add the value
-                for i=1:numel(nodes)
-                    nKappa{end+1} = obj.neumKappa{d}; % add forcing function
-                end
+            nVals  = [];
+
+            for n = 1:numel(obj.neuEdges) % sweep over neumann assigned edeges
+                nodes  = unique(findNodes(obj.mesh, "region", "Edge", obj.neuEdges(n)));
+                nNodes = [nNodes; nodes(:)]; % add add unique nodes
+                nVals  = [nVals;  obj.neuVals(n)*ones(numel(nodes),1)]; % add the value
             end
         end
 
@@ -302,32 +326,53 @@ classdef FEMProblem
 
                 elems = obj.mesh.Elements; % elements
                 n = obj.mesh.Nodes; % nodes
-                node_indices = elems(:,e); % indices for the element
 
-                % fine the centroid
-                centroidX = (n(1, node_indices(1)) + n(1, node_indices(1)) ...
-                    + n(1, node_indices(1))) / 3;
-                centroidY = (n(2, node_indices(1)) + n(2, node_indices(1)) ...
-                    + n(2, node_indices(1))) / 3;
+                alpha_e = zeros(1,size(e,2)); % initialize
+                for k = 1:numel(e)
+                    node_indices = elems(:,e(k)); % indices for the element
 
-                % calculate the radius
-                centroid_rho = sqrt(centroidX^2 + centroidY^2);
-                
-                % evaluate
-                alpha_e = obj.ep_r_center(centroid_rho);
+                    % fine the centroid
+                    centroidX = (n(1, node_indices(1)) + n(1, node_indices(2)) ...
+                        + n(1, node_indices(3))) / 3;
+                    centroidY = (n(2, node_indices(1)) + n(2, node_indices(2)) ...
+                        + n(2, node_indices(3))) / 3;
+
+                    % evaluate ep_r_center
+                    if nargin(obj.ep_r_center) == 2 % cartesian ep_r_center
+                        alpha_e(k) = obj.ep_r_center(centroidX, centroidY);
+                    else
+                        % radial ep_r_center
+                        centroid_rho = sqrt(centroidX^2 + centroidY^2);
+                        alpha_e(k) = obj.ep_r_center(centroid_rho);
+                    end
+                end
             else
-                alpha_e = obj.ep_r_center; % constant
+                alpha_e = obj.ep_r_center * ones(1,size(e,2)); % constant
             end
         end
 
-        % evaluate K_alpha contributions
+        function obj = plotEps(obj)
+            [p,e,t] = meshToPet(obj.mesh);
+            pdeplot(p, e, t, XYData=obj.alphaElem(1:size(t,2)), XYStyle="flat", ColorMap="jet")
+        end
+
         function obj = assembleKalpha(obj)
+        % ASSEMBLEKALPHA Add K_alpha to the K matrix.
+        % obj = obj.assembleKalpha()
+        %
+        % INPUTS
+        %
+        % OUTPUTS
+        % obj        FEMproblem pobject with obj.K additively updated with
+        %            the K_alpha term
+
             elems = obj.mesh.Elements;
             for e=1:size(elems,2)
                 % get nodes of element
                 node_indices = elems(:,e);
                 delta_e = obj.areaElem(e);
                 abc = obj.elemABC(e);
+
                 for l = 1:length(node_indices)
                     for k = 1:length(node_indices)
                         % get corresponding indices in system matrix
@@ -348,7 +393,7 @@ classdef FEMProblem
         end
 
         function obj = assembleKbeta(obj)
-        % ASSEMBLEKBETA Add K_beta to the K matrix
+        % ASSEMBLEKBETA Add K_beta to the K matrix.
         % obj = obj.assembleKbeta()
         %
         % INPUTS
@@ -382,7 +427,7 @@ classdef FEMProblem
             %            term
 
             elems = obj.mesh.Elements;
-            [nNodes, nGamma, nKappa] = obj.neumannNodes();
+            [nNodes, nVals] = obj.neumannNodes();
 
             for e=1:size(elems,2) % for each element
                 % get nodes of element
@@ -405,8 +450,7 @@ classdef FEMProblem
                         % nodes i and j are both on the neumann boundary,
                         % so we add their contribution to the system matrix
 
-                        gammaN = nGamma(iN);
-                        assert(gammaN == nGamma(jN));
+                        gammaN = obj.gamma;
 
                         % we want the length of the segment between nodes i
                         % and j, since this is the path we are integrating
@@ -417,10 +461,30 @@ classdef FEMProblem
                         obj.K(i,j) = obj.K(i,j) + ijLen * 1/6 * (1 + (i==j)) * gammaN;
 
                         % add contributions to beta_n
-                        iPos = obj.mesh.Nodes(:,i);
-                        obj.b(i) = obj.b(i) + 0.5 * nKappa{iN}(iPos(1), iPos(2)) * ijLen;
+                        obj.b(i) = obj.b(i) + 0.5 * nVals(iN) * ijLen;
                     end
                 end
+            end
+        end
+
+        function obj = assemblebF(obj)
+        % ASSEMBLEBF Add b_F to the b matrix.
+        % obj = obj.assemblebF()
+        %
+        % INPUTS
+        % 
+        % OUTPUTS
+        % obj        FEMproblem pobject with obj.b additively updated with
+        %            the b_F term
+
+            elems = obj.mesh.Elements;
+            for e=1:size(elems,2) % for each element
+
+                idx = elems(:,e); % get the nodes from element e
+                delta_e = obj.areaElem(e); % area of element e
+                        
+                % product of l-th and k-th elements on e
+                obj.b(idx) = obj.b(idx) + obj.f * delta_e/3;
             end
         end
 
@@ -448,15 +512,17 @@ classdef FEMProblem
             obj = obj.assembleKalpha();
             obj = obj.assembleKbeta();
             obj = obj.assembleKgammaBn();
-
+            obj = obj.assemblebF();
             obj = obj.correctDirichlet();
 
-            phi = obj.K \ obj.b;
-            pdeplot(obj.mesh, XYData=phi, ColorMap="jet");
+            obj.phi = obj.K \ obj.b;
+            pdeplot(obj.mesh, XYData=abs(obj.phi), ColorMap="jet");
+        end
 
+        function Cap = calculateCap(obj)
             % Calculate capacitance:
             elems = obj.mesh.Elements;
-            [gradX, gradY] = pdegrad(obj.mesh.Nodes, elems, phi); % calculate gradients
+            [gradX, gradY] = pdegrad(obj.mesh.Nodes, elems, obj.phi); % calculate gradients
 
             W = 0; % electric energy
             for e = 1:size(elems,2)
@@ -465,10 +531,7 @@ classdef FEMProblem
             end
 
             % Capacitance (calculate and save)
-            obj.Cap = W * 8.85 * 1e-12; % F/m per Volt  
-
-            obj.phi = phi;
+            Cap = W * 8.85 * 1e-12; % F/m per Volt  
         end
-
     end
 end
