@@ -208,3 +208,7 @@ per_Err = abs(C_analytical - C_approx)/C_analytical * 100;
 
 disp("Capcitance (Unit test 3) = " + C_approx);
 disp("Percent Error = " + per_Err + "%");
+
+%%%%%%%%%%%%%%%%%%%
+%%% Unit test 4 %%%
+%%%%%%%%%%%%%%%%%%%
