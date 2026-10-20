@@ -20,6 +20,8 @@ classdef FEMProblem
         K % system matrix
         b % right hand side
         Cap % capacitance
+
+        phi % nodal solution
     end
 
     methods
@@ -445,6 +447,7 @@ classdef FEMProblem
             % assemble terms in matrix
             obj = obj.assembleKalpha();
             obj = obj.assembleKbeta();
+            obj = obj.assembleKgammaBn();
 
             obj = obj.correctDirichlet();
 
@@ -463,6 +466,8 @@ classdef FEMProblem
 
             % Capacitance (calculate and save)
             obj.Cap = W * 8.85 * 1e-12; % F/m per Volt  
+
+            obj.phi = phi;
         end
 
     end
