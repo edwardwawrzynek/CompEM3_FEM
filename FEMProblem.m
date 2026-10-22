@@ -9,12 +9,8 @@ classdef FEMProblem
         dirEdges % dirichlet BC edeges
         dirVals  % dirichlet BC values
         neuEdges % Neumann BC edges
-        neuKappa % Neumann BC values
+        neuKappa = {} % Neumann BC values
         neuGamma % Neumann BC values
-
-        neumEdges  % edges on which to apply neumann boundary
-        neumGamma % neumann BC gamma term
-        neumKappa % neumann BC forcing term
 
         model % pde model object
         mesh % pde mesh object
@@ -33,7 +29,7 @@ classdef FEMProblem
 
         function obj = makeRing(obj, geo_a, geo_b)
         % MAKERING  Build a ring and attach it to the model.
-        % obj = obj.makeRing(geo_a, geo_b, swp_angle)
+        % obj = obj.makeRing(geo_a, geo_b)
         %
         % INPUTS
         % geo_a      inner radius [m]
@@ -209,16 +205,6 @@ classdef FEMProblem
             delta_e = 0.5*(abc(1,2)*abc(2,3) - abc(2,2)*abc(1,3));
         end
 
-        % evaluate the l-th (l=1,2,or 3) basis function over element e at
-        % position (x,y) (which must be inside element e)
-        % notice that l is indexed per element, not by global nodal index
-        function phi_l = basisElemL(obj, e, l, x, y)
-            abc = obj.elemABC(e);
-            delta_e = obj.areaElem(e);
-
-            phi_l = (abc(l,1) + abc(l,2)*x + abc(l,3)*y) / 2 / delta_e;
-        end
-
         function obj = setDirichletBC(obj, edges, val)
         % SETDIRICHLETBC Set Dirichlet boundary conditions
         % obj = obj.setDirichletBC(edges, val)
@@ -260,7 +246,7 @@ classdef FEMProblem
             n = numel(edges);
             obj.neuEdges(end+1:end+n) = edges;
             obj.neuGamma(end+1:end+n) = gammaVal;
-            obj.neuKappa(end+1:end+n) = kappaVal;
+            obj.neuKappa(end+1:end+n) = {kappaVal};
         end
 
         function [dNodes, dVals] = dirichletNodes(obj)
@@ -305,7 +291,7 @@ classdef FEMProblem
             for n = 1:numel(obj.neuEdges) % sweep over neumann assigned edeges
                 nodes  = unique(findNodes(obj.mesh, "region", "Edge", obj.neuEdges(n)));
                 nNodes = [nNodes; nodes(:)]; % add add unique nodes
-                nKappa  = [nKappa;  obj.neuKappa(n)*ones(numel(nodes),1)]; % add the value
+                nKappa  = [nKappa;  obj.kappaNode(n, nodes(:))]; % add the evaluated values
                 nGamma = [nGamma;  obj.neuGamma(n)*ones(numel(nodes),1)]; % add the value
             end
         end
@@ -353,6 +339,46 @@ classdef FEMProblem
             end
         end
 
+        function kappa_n = kappaNode(obj, q, nodes)
+        % KAPPA_N assign kappa_n values in the scenario of variable or
+        % constant obj.neuKappa.
+        % kappa_n = obj.kappaNode(q, nodes)
+        %
+        % INPUTS
+        % q          the index of the Neumann edge for which obj.neuKappa 
+        %            is to be evaluated
+        % nodes      the nodes on that edge for which obj.neuKappa is to be
+        %            evaluated
+        %
+        % OUTPUTS
+        % kappa_n    if obj.neuKappa{q} is a function handle this is the function
+        %            evaluated at each node. If it is a constant it is set equal
+        %            to that value.
+            if isa(obj.neuKappa{q}, 'function_handle')
+
+                n = obj.mesh.Nodes; % nodes
+                kappa_n = zeros(numel(nodes),1); % initialize
+
+                for k = 1:numel(nodes)
+
+                    % find the node position
+                    nodeX = n(1, nodes(k));
+                    nodeY = n(2, nodes(k));
+
+                    % evaluate kappa_n
+                    if nargin(obj.neuKappa{q}) == 2 % cartesian kappa_n
+                        kappa_n(k) = obj.neuKappa{q}(nodeX, nodeY);
+                    else
+                        % radial kappa_n
+                        node_rho = sqrt(nodeX^2 + nodeY^2);
+                        kappa_n(k) = obj.neuKappa{q}(node_rho);
+                    end
+                end
+            else
+                kappa_n = obj.neuKappa{q} * ones(numel(nodes),1); % constant
+            end
+        end
+
         function obj = plotEps(obj)
             [p,e,t] = meshToPet(obj.mesh);
             pdeplot(p, e, t, XYData=obj.alphaElem(1:size(t,2)), XYStyle="flat", ColorMap="jet")
@@ -374,6 +400,7 @@ classdef FEMProblem
                 node_indices = elems(:,e);
                 delta_e = obj.areaElem(e);
                 abc = obj.elemABC(e);
+                alpha_e = obj.alphaElem(e);
 
                 for l = 1:length(node_indices)
                     for k = 1:length(node_indices)
@@ -386,7 +413,6 @@ classdef FEMProblem
                         % obj.alpha to handle cases in which
                         % alpha is varied radially (e.g. test case 3).
 
-                        alpha_e = obj.alphaElem(e);
                         obj.K(i,j) = obj.K(i,j) ...
                             + alpha_e * (1/(4*delta_e) * (abc(l,2)*abc(k,2) + abc(l,3)*abc(k,3)));
                     end
@@ -432,7 +458,7 @@ classdef FEMProblem
 
             for e=1:size(elems,2) % for each element
                 node_indices = elems(:,e);
-                abc = obj.elemABC(e);
+                
                 for l = 1:length(node_indices) % for each node
                     for k = 1:length(node_indices) % for each node
                         i = node_indices(l); j = node_indices(k);
