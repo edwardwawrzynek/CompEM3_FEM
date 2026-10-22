@@ -1,6 +1,8 @@
 clc; clear; close all;
 
 intermediatePlots = false;
+mesh_h = @(lambda) lambda/80;
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%% PEC cylinder, TM_z  %%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -9,9 +11,9 @@ c0 = 3*1e8; % speed of light
 f0 = 10e9; % frequency
 lambda0 = c0/f0; % lambda
 k0 = 2*pi/lambda0; % wave vector magnitude
+geo_a = 0.015; geo_b = 3*lambda0; % spatial
 beta = -k0^2; % beta
 alpha = 1; % alpha
-geo_a = 0.015; geo_b = 3*lambda0;
 
 % save properties
 properties_a = {c0; f0; lambda0; k0; beta; alpha; beta; geo_a; geo_b};
@@ -31,7 +33,7 @@ kappa_abc = @(x,y) (gamma_abc - 1j*k0*x/geo_b) .* exp(-1j*k0*x);
 a = a.setNeumannBC(1:4, gamma_abc, kappa_abc);
 
 % create the mesh
-a = a.createMesh(lambda0/20);
+a = a.createMesh(mesh_h(lambda0));
 
 if intermediatePlots
     fig_a = figure('Color','White', 'Units','normalized', 'Position', [0.02 0.04 0.96 0.5]);
@@ -82,7 +84,7 @@ else
     box on; grid on;
     axis equal tight;
     colormap inferno;
-    title("\Phi(x,y)")
+    title("|E(x,y)| [V/m]")
     xlabel("x [m]")
     ylabel("y [m]")
 end
@@ -95,9 +97,9 @@ c0 = 3*1e8; % speed of light
 f0 = 10e9; % frequency
 lambda0 = c0/f0; % lambda
 k0 = 2*pi/lambda0; % wave vector magnitude
+geo_a = 0.015; geo_b = 3*lambda0; % spatial
 beta = -k0^2; % beta
 alpha = 1; % alpha
-geo_a = 0.015; geo_b = 3*lambda0;
 
 % save properties
 properties_b = {c0; f0; lambda0; k0; beta; alpha; beta; geo_a; geo_b};
@@ -117,7 +119,7 @@ kappa_abc = @(x,y) (gamma_abc - 1j*k0*x/geo_b) .* exp(-1j*k0*x);
 b = b.setNeumannBC(1:4, gamma_abc, kappa_abc);
 
 % create the mesh
-b = b.createMesh(lambda0/20);
+b = b.createMesh(mesh_h(lambda0));
 
 if intermediatePlots
     fig_b = figure('Color','White', 'Units','normalized', 'Position', [0.02 0.04 0.96 0.5]);
@@ -168,7 +170,7 @@ else
     box on; grid on;
     axis equal tight;
     colormap inferno;
-    title("\Phi(x,y)")
+    title("|H(x,y)| [A/m]")
     xlabel("x [m]")
     ylabel("y [m]")
 end
@@ -182,12 +184,12 @@ f0 = 10e9; % frequency
 lambda0 = c0/f0; % lambda
 k0 = 2*pi/lambda0; % wave vector magnitude
 eps_r = 9; % dielectric permittivity
+geo_a = 0.015; geo_b = 3*lambda0; % spatial
 beta = @(rad) -k0^2*(1 + (eps_r-1)*(rad < geo_a)); % beta
 alpha = 1; % alpha
-geo_a = 0.015; geo_b = 3*lambda0;
 
 % save properties
-properties_c = {c0; f0; lambda0; k0; beta; alpha; beta; geo_a; geo_b};
+properties_c = {c0; f0; lambda0; k0; beta; alpha; beta; geo_a; geo_b; eps_r};
 
 % set up the problem
 c = FEMProblem(alpha, beta, 0);
@@ -202,7 +204,7 @@ kappa_abc = @(x,y) (gamma_abc - 1j*k0*x/geo_b) .* exp(-1j*k0*x);
 c = c.setNeumannBC(1:4, gamma_abc, kappa_abc);
 
 % create the mesh
-c = c.createMesh(lambda0/40);
+c = c.createMesh(mesh_h(lambda0));
 
 if intermediatePlots
     fig_c = figure('Color','White', 'Units','normalized', 'Position', [0.02 0.04 0.96 0.5]);
@@ -253,7 +255,7 @@ else
     box on; grid on;
     axis equal tight;
     colormap inferno;
-    title("\Phi(x,y)")
+    title("|E(x,y)| [V/m]")
     xlabel("x [m]")
     ylabel("y [m]")
 end
@@ -267,12 +269,12 @@ f0 = 10e9; % frequency
 lambda0 = c0/f0; % lambda
 k0 = 2*pi/lambda0; % wave vector magnitude
 eps_r = 9; % dielectric permittivity
+geo_a = 0.015; geo_b = 3*lambda0; % spatial
 beta = -k0^2; % beta
 alpha = @(rad) 1./(1 + (eps_r-1)*(rad < geo_a)); % alpha
-geo_a = 0.015; geo_b = 3*lambda0;
 
 % save properties
-properties_d = {c0; f0; lambda0; k0; beta; alpha; beta; geo_a; geo_b};
+properties_d = {c0; f0; lambda0; k0; beta; alpha; beta; geo_a; geo_b; eps_r};
 
 % set up the problem
 d = FEMProblem(alpha, beta, 0);
@@ -287,7 +289,7 @@ kappa_abc = @(x,y) (gamma_abc - 1j*k0*x/geo_b) .* exp(-1j*k0*x);
 d = d.setNeumannBC(1:4, gamma_abc, kappa_abc);
 
 % create the mesh
-d = d.createMesh(lambda0/40);
+d = d.createMesh(mesh_h(lambda0));
 
 if intermediatePlots
     fig_d = figure('Color','White', 'Units','normalized', 'Position', [0.02 0.04 0.96 0.5]);
@@ -338,7 +340,7 @@ else
     box on; grid on;
     axis equal tight;
     colormap inferno;
-    title("\Phi(x,y)")
+    title("|H(x,y)| [A/m]")
     xlabel("x [m]")
     ylabel("y [m]")
 end
@@ -349,97 +351,89 @@ end
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 % CASE 1: TMz PEC
-[Ei_a Es_a Et_a] = plotIST_fields(a, properties_a);
+plotIST_fields(a, properties_a);
 
 % CASE 2: TEz PEC
-[Ei_b Es_b Et_b] = plotIST_fields(b, properties_b);
+plotIST_fields(b, properties_b);
 
 % CASE 3: TMz Dielectric
-[Ei_c Es_c Et_c] = plotIST_fields(c, properties_c);
+plotIST_fields(c, properties_c);
 
 % CASE 4: TEz Dielectric
-[Ei_d Es_d Et_d] = plotIST_fields(d, properties_d);
-
-function G = evalInterp(nodeX, nodeY, E, x, y)
-    F = scatteredInterpolant(nodeX, nodeY, real(E), 'linear', 'none');
-    G = F(x, y);
-end
-
-function [Ei, Es, Et] = plotIST_fields(obj, properties)
-    nodeX = obj.mesh.Nodes(1,:);
-    nodeY = obj.mesh.Nodes(2,:);
-    R = properties{8};
-    f = properties{2};
-    k = 2*pi*f/3e8;
-    Ei = exp(-1j*k*nodeX).';
-    Et = obj.phi;
-    Es = Et - Ei;
-    
-    % interpolate onto a grid
-    x = linspace(min(nodeX), max(nodeX), 1000);
-    y = linspace(min(nodeY), max(nodeY), 1000);
-    [X, Y] = meshgrid(x, y);
-    Gi = evalInterp(nodeX.', nodeY.', real(Ei), X, Y);
-    Gt = evalInterp(nodeX.', nodeY.', real(Et), X, Y);
-    Gs = evalInterp(nodeX.', nodeY.', real(Es), X, Y);
-
-    if ~any(nodeX.^2 + nodeY.^2 < (0.95*R)^2) % if PEC
-        m = X.^2 + Y.^2 < R^2;
-        Gi(m) = NaN; Gt(m) = NaN; Gs(m) = NaN;
-    end
-    
-    % plot
-    fig = figure('Color','White', 'Units','normalized', 'Position', [0.02 0.04 0.96 0.5]);
-    t = tiledlayout(fig, 1, 3, 'TileSpacing','compact', 'Padding','compact');
-    
-    % incident field
-    nexttile;
-    imagesc(x, y, Gi); hold on;
-    plot(R*cos(linspace(0,2*pi,300)), R*sin(linspace(0,2*pi,300)), 'k', 'LineWidth', 1.5);
-    set(gca,'YDir','normal', 'TickLength', [0,0], 'FontName', 'Times', 'FontSize', 18);
-    set(gcf, 'Color', 'w')
-    axis equal tight;
-    colormap inferno;
-    colorbar;
-    cl = 0.50*max(abs(Gi), [], 'all');
-    clim([-cl cl]);
-    title("Incident");
-    xlabel("x [m]")
-    ylabel("y [m]")
-    
-    % scattered field
-    nexttile;
-    imagesc(x, y, Gs); hold on;
-    plot(R*cos(linspace(0,2*pi,300)), R*sin(linspace(0,2*pi,300)), 'k', 'LineWidth', 1.5);
-    set(gca,'YDir','normal', 'TickLength', [0,0], 'FontName', 'Times', 'FontSize', 18);
-    set(gcf, 'Color', 'w')
-    axis equal tight;
-    colormap inferno;
-    colorbar;
-    cl = 0.50*max(abs(Gs), [], 'all');
-    clim([-cl cl]);
-    title("Scattered");
-    xlabel("x [m]")
-    ylabel("y [m]")
-    
-    % total field
-    nexttile;
-    imagesc(x, y, Gt); hold on;
-    plot(R*cos(linspace(0,2*pi,300)), R*sin(linspace(0,2*pi,300)), 'k', 'LineWidth', 1.5);
-    set(gca,'YDir','normal', 'TickLength', [0,0], 'FontName', 'Times', 'FontSize', 18);
-    set(gcf, 'Color', 'w')
-    axis equal tight;
-    colormap inferno;
-    colorbar;
-    cl = 0.50*max(abs(Gt), [], 'all');
-    clim([-cl cl]);
-    title("Total");
-    xlabel("x [m]")
-    ylabel("y [m]")
-    hold off;
-end
+plotIST_fields(d, properties_d);
 
 %%
 %%%%%%%%%%%%%%%%%%
 %%% Echo Width %%%
 %%%%%%%%%%%%%%%%%%
+
+% sweep the angle
+angle = linspace(0, 2*pi, 360);
+
+% CASE 1: TMz PEC
+k0 = properties_a{4}; R = properties_a{8};
+sigma_simulated  = simulated_echo_width(a, properties_a, 0.05, 360, 50);
+sigma_analytical = bistatic_echo_width_tm_pec(angle, k0, R);
+
+% plot
+figure();
+plot(angle*180/pi, sigma_simulated, 'LineWidth', 2); hold on;
+plot(angle*180/pi, sigma_analytical, 'LineWidth', 2);
+set(gca,'FontName', 'Times', 'FontSize', 18);
+set(gcf, 'Color', 'w')
+legend("Simulated", "Analytic");
+title("Bistatic Echowidth; TM_z PEC")
+xlabel("\phi [deg]");
+ylabel("\sigma(\phi)");
+grid on; box on;
+
+% CASE 2: TEz PEC
+k0 = properties_b{4}; R = properties_b{8};
+sigma_simulated  = simulated_echo_width(b, properties_b, 0.05, 360, 50);
+sigma_analytical = bistatic_echo_width_te_pec(angle, k0, R);
+
+% plot
+figure();
+plot(angle*180/pi, sigma_simulated, 'LineWidth', 2); hold on;
+plot(angle*180/pi, sigma_analytical, 'LineWidth', 2);
+set(gca,'FontName', 'Times', 'FontSize', 18);
+set(gcf, 'Color', 'w')
+legend("Simulated", "Analytic");
+title("Bistatic Echowidth; TE_z PEC")
+xlabel("\phi [deg]");
+ylabel("\sigma(\phi)");
+grid on; box on;
+
+% CASE 3: TMz Dielectric
+k0 = properties_c{4}; R = properties_c{8}; eps_r = properties_c{10};
+sigma_simulated  = simulated_echo_width(c, properties_c, 0.05, 360, 50);
+sigma_analytical = bistatic_echo_width_tm_eps(angle, k0, R, eps_r);
+
+% plot
+figure();
+plot(angle*180/pi, sigma_simulated, 'LineWidth', 2); hold on;
+plot(angle*180/pi, sigma_analytical, 'LineWidth', 2);
+set(gca,'FontName', 'Times', 'FontSize', 18);
+set(gcf, 'Color', 'w')
+legend("Simulated", "Analytic");
+title("Bistatic Echowidth; TM_z Dielectric")
+xlabel("\phi [deg]");
+ylabel("\sigma(\phi)");
+grid on; box on;
+
+% CASE 4: TEz Dielectric
+k0 = properties_d{4}; R = properties_d{8}; eps_r = properties_d{10};
+sigma_simulated  = simulated_echo_width(d, properties_d, 0.05, 360, 10);
+sigma_analytical = bistatic_echo_width_te_eps(angle, k0, R, eps_r);
+
+% plot
+figure();
+plot(angle*180/pi, sigma_simulated, 'LineWidth', 2); hold on;
+plot(angle*180/pi, sigma_analytical, 'LineWidth', 2);
+set(gca,'FontName', 'Times', 'FontSize', 18);
+set(gcf, 'Color', 'w')
+legend("Simulated", "Analytic");
+title("Bistatic Echowidth; TE_z Dielectric")
+xlabel("\phi [deg]");
+ylabel("\sigma(\phi)");
+grid on; box on;
