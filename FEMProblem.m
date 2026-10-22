@@ -62,6 +62,34 @@ classdef FEMProblem
             obj.geometry = geometryFromEdges(obj.model, g);
         end
 
+        function obj = makeDisk(obj, geo_a, geo_b)
+            % MAKEDISC  Build a disc inside a circular boundary and attach 
+            % it to the model.
+            % obj = obj.makeDisc(geo_a, geo_b)
+            %
+            % INPUTS
+            % geo_a      inner radius [m]
+            % geo_b      outer radius [m]
+            %
+            % OUTPUTS
+            % obj        FEMProblem object with updated obj.model and obj.geometry
+
+            circle_code = 1;
+
+            % create model
+            obj.model = createpde();
+
+            % outer circle (boundary)
+            B = [circle_code, 0, 0, geo_b]';
+
+            % inner circle (dielectric cylinder)
+            A = [circle_code, 0, 0, geo_a]';
+
+            % build geometry (union keeps the interface as an edge)
+            g = decsg([B A]);
+            obj.geometry = geometryFromEdges(obj.model, g);
+        end
+
         function obj = makeSlice(obj, geo_a, geo_b, swp_angle)
         % MAKESLICE  Build a wedge (slice) and attach it to the model.
         % obj = obj.makeSlice(geo_a, geo_b, swp_angle)
@@ -379,6 +407,49 @@ classdef FEMProblem
             end
         end
 
+        function beta_e = betaElem(obj, e)
+        % BETA_E assign beta values in the scenario of variable or 
+        % constant obj.beta.
+        % beta_e = obj.betaElem(e)
+        %
+        % INPUTS
+        % e          the element for which obj.beta is to be
+        %            evaluated
+        %
+        % OUTPUTS
+        % beta_e     if obj.beta is a function handle this is the function 
+        %            evaluated at the centroid of the element cell. If it is
+        %            a constant it is set equal to that value.
+
+            if isa(obj.beta, 'function_handle') 
+
+                elems = obj.mesh.Elements; % elements
+                n = obj.mesh.Nodes; % nodes
+
+                beta_e = zeros(1,size(e,2)); % initialize
+                for k = 1:numel(e)
+                    node_indices = elems(:,e(k)); % indices for the element
+
+                    % find the centroid
+                    centroidX = (n(1, node_indices(1)) + n(1, node_indices(2)) ...
+                        + n(1, node_indices(3))) / 3;
+                    centroidY = (n(2, node_indices(1)) + n(2, node_indices(2)) ...
+                        + n(2, node_indices(3))) / 3;
+
+                    % evaluate beta
+                    if nargin(obj.beta) == 2 % cartesian beta
+                        beta_e(k) = obj.beta(centroidX, centroidY);
+                    else
+                        % radial beta
+                        centroid_rho = sqrt(centroidX^2 + centroidY^2);
+                        beta_e(k) = obj.beta(centroid_rho);
+                    end
+                end
+            else
+                beta_e = obj.beta * ones(1,size(e,2)); % constant
+            end
+        end
+
         function obj = plotEps(obj)
             [p,e,t] = meshToPet(obj.mesh);
             pdeplot(p, e, t, XYData=obj.alphaElem(1:size(t,2)), XYStyle="flat", ColorMap="jet")
@@ -435,10 +506,11 @@ classdef FEMProblem
 
                 idx = elems(:,e); % get the nodes from element e
                 delta_e = obj.areaElem(e); % area of element e
+                beta_e = obj.betaElem(e); % beta at element e
                         
                 % product of l-th and k-th elements on e
                 obj.K(idx,idx) = obj.K(idx,idx) ...
-                    + obj.beta * delta_e/12 * [2, 1, 1; 1, 2, 1; 1, 1, 2];
+                    + beta_e * delta_e/12 * [2, 1, 1; 1, 2, 1; 1, 1, 2];
             end
         end
 
@@ -528,8 +600,10 @@ classdef FEMProblem
         function obj = assemble(obj)
             % 
             % init empty system matrix
-            obj.K = zeros(length(obj.mesh.Nodes));
-            obj.b = zeros(length(obj.mesh.Nodes),1);
+            N = length(obj.mesh.Nodes);
+            obj.K = spalloc(N, N, 10*N); % sparse
+            obj.b = zeros(N,1); 
+
 
             % assemble terms in matrix
             obj = obj.assembleKalpha();
