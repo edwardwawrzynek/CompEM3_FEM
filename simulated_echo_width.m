@@ -27,11 +27,12 @@ function sigma_simulated = simulated_echo_width(obj, properties, R_samp, Npts, N
 
     % azimuthal harmonics
     a_n = fftshift(fft(Es_c)) / Npts;
-    n = -Npts/2:Npts/2-1;
+
+    n = (0:(Npts-1)) - floor(Npts/2);
 
     % truncate to Nmax
-    a_n = a_n(abs(n) <= Nmax);
-    n = n(abs(n) <= Nmax);
+    %a_n = a_n(abs(n) <= Nmax);
+    %n = n(abs(n) <= Nmax);
 
     % propagate to far field
     c_n = a_n ./ besselh(n, 2, k0*R_samp);
@@ -41,6 +42,6 @@ function sigma_simulated = simulated_echo_width(obj, properties, R_samp, Npts, N
 
     % calculate bistatic echo width
     for p = 1:numel(angle)
-        sigma_simulated(p) = 4/k0 * abs(sum((1j).^n .* c_n .* exp(1j*n*angle(p))))^2;
+        sigma_simulated(p) = 4/k0 * abs(sum(c_n .* exp(1j*(2*n+1)*pi/4) .* exp(1j*n*angle(p))))^2;
     end
 end

@@ -1,7 +1,7 @@
 clc; clear; close all;
 
-intermediatePlots = false;
-mesh_h = @(lambda) lambda/80;
+intermediatePlots = true;
+mesh_h = @(lambda) lambda/20;
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%% PEC cylinder, TM_z  %%%
@@ -11,7 +11,7 @@ c0 = 3*1e8; % speed of light
 f0 = 10e9; % frequency
 lambda0 = c0/f0; % lambda
 k0 = 2*pi/lambda0; % wave vector magnitude
-geo_a = 0.015; geo_b = 3*lambda0; % spatial
+geo_a = 0.015; geo_b = 4*lambda0; % spatial
 beta = -k0^2; % beta
 alpha = 1; % alpha
 
@@ -97,7 +97,7 @@ c0 = 3*1e8; % speed of light
 f0 = 10e9; % frequency
 lambda0 = c0/f0; % lambda
 k0 = 2*pi/lambda0; % wave vector magnitude
-geo_a = 0.015; geo_b = 3*lambda0; % spatial
+geo_a = 0.015; geo_b = 4*lambda0; % spatial
 beta = -k0^2; % beta
 alpha = 1; % alpha
 
@@ -184,7 +184,7 @@ f0 = 10e9; % frequency
 lambda0 = c0/f0; % lambda
 k0 = 2*pi/lambda0; % wave vector magnitude
 eps_r = 9; % dielectric permittivity
-geo_a = 0.015; geo_b = 3*lambda0; % spatial
+geo_a = 0.015; geo_b = 4*lambda0; % spatial
 beta = @(rad) -k0^2*(1 + (eps_r-1)*(rad < geo_a)); % beta
 alpha = 1; % alpha
 
@@ -269,7 +269,7 @@ f0 = 10e9; % frequency
 lambda0 = c0/f0; % lambda
 k0 = 2*pi/lambda0; % wave vector magnitude
 eps_r = 9; % dielectric permittivity
-geo_a = 0.015; geo_b = 3*lambda0; % spatial
+geo_a = 0.015; geo_b = 4*lambda0; % spatial
 beta = -k0^2; % beta
 alpha = @(rad) 1./(1 + (eps_r-1)*(rad < geo_a)); % alpha
 
@@ -368,11 +368,11 @@ plotIST_fields(d, properties_d);
 %%%%%%%%%%%%%%%%%%
 
 % sweep the angle
-angle = linspace(0, 2*pi, 360);
+angle = linspace(0, 2*pi, 101);
 
 % CASE 1: TMz PEC
 k0 = properties_a{4}; R = properties_a{8};
-sigma_simulated  = simulated_echo_width(a, properties_a, 0.05, 360, 50);
+sigma_simulated  = simulated_echo_width(a, properties_a, 0.1, 101, 50);
 sigma_analytical = bistatic_echo_width_tm_pec(angle, k0, R);
 
 % plot
@@ -389,7 +389,7 @@ grid on; box on;
 
 % CASE 2: TEz PEC
 k0 = properties_b{4}; R = properties_b{8};
-sigma_simulated  = simulated_echo_width(b, properties_b, 0.05, 360, 50);
+sigma_simulated  = simulated_echo_width(b, properties_b, 0.1, 101, 50);
 sigma_analytical = bistatic_echo_width_te_pec(angle, k0, R);
 
 % plot
@@ -406,7 +406,7 @@ grid on; box on;
 
 % CASE 3: TMz Dielectric
 k0 = properties_c{4}; R = properties_c{8}; eps_r = properties_c{10};
-sigma_simulated  = simulated_echo_width(c, properties_c, 0.05, 360, 50);
+sigma_simulated  = simulated_echo_width(c, properties_c, 0.1, 101, 50);
 sigma_analytical = bistatic_echo_width_tm_eps(angle, k0, R, eps_r);
 
 % plot
@@ -423,7 +423,7 @@ grid on; box on;
 
 % CASE 4: TEz Dielectric
 k0 = properties_d{4}; R = properties_d{8}; eps_r = properties_d{10};
-sigma_simulated  = simulated_echo_width(d, properties_d, 0.05, 360, 10);
+sigma_simulated  = simulated_echo_width(d, properties_d, 0.1, 101, 50);
 sigma_analytical = bistatic_echo_width_te_eps(angle, k0, R, eps_r);
 
 % plot
