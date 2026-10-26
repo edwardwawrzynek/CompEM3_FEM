@@ -12,9 +12,9 @@ function [Ei, Es, Et] = plotIST_fields(obj, properties)
     x = linspace(min(nodeX), max(nodeX), 1000);
     y = linspace(min(nodeY), max(nodeY), 1000);
     [X, Y] = meshgrid(x, y);
-    Gi = evalInterp(nodeX.', nodeY.', real(Ei), X, Y);
-    Gt = evalInterp(nodeX.', nodeY.', real(Et), X, Y);
-    Gs = evalInterp(nodeX.', nodeY.', real(Es), X, Y);
+    Gi = evalInterp(nodeX.', nodeY.', abs(Ei), X, Y);
+    Gt = evalInterp(nodeX.', nodeY.', abs(Et), X, Y);
+    Gs = evalInterp(nodeX.', nodeY.', abs(Es), X, Y);
     
     if ~any(nodeX.^2 + nodeY.^2 < (0.95*R)^2) % if PEC
         m = X.^2 + Y.^2 < R^2;
@@ -42,15 +42,16 @@ function [Ei, Es, Et] = plotIST_fields(obj, properties)
     
     % scattered field
     nexttile;
-    imagesc(x, y, Gs); hold on;
+    imagesc(x, y, 20*log10(Gs)); hold on;
     plot(R*cos(linspace(0,2*pi,300)), R*sin(linspace(0,2*pi,300)), 'k', 'LineWidth', 1.5);
     set(gca,'YDir','normal', 'TickLength', [0,0], 'FontName', 'Times', 'FontSize', 18);
     set(gcf, 'Color', 'w')
     axis equal tight;
-    colormap inferno;
-    colorbar;
-    cl = 0.50*max(abs(Gs), [], 'all');
-    clim([-cl cl]);
+    colormap parula;
+    cb=colorbar;
+    cb.Label.String = "Scattered Field (dBV/m)";
+    %cl = 0.50*max(abs(Gs), [], 'all');
+    %clim([-cl cl]);
     title("Scattered");
     xlabel("x [m]")
     ylabel("y [m]")

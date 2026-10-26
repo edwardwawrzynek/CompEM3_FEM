@@ -8,12 +8,12 @@ sweep_var = 2;
 
 if sweep_var == 1
     % h-sweep
-    sweep = [1/10, 1/30, 1/50, 1/70, 1/90];
+    sweep = [1/10];
 end
 
 if sweep_var == 2
     % trunc-sweep
-    sweep = 1:2:10;
+    sweep = 3:1:7;
 end
 
 if sweep_var == 3
@@ -28,12 +28,14 @@ RMSE_TM_Diel = cell(1, numel(sweep));
 RMSE_TE_Diel = cell(1, numel(sweep));
 
 for k = 1:numel(sweep)
+    
+    disp(k);
 
     if sweep_var == 1
         % for h-sweep
         mesh_h = @(lambda) lambda * sweep(k);
     else
-        mesh_h = @(lambda) lambda * 1/60;
+        mesh_h = @(lambda) lambda * 1/100;
     end
 
     if sweep_var == 2
@@ -42,7 +44,8 @@ for k = 1:numel(sweep)
     else
         trunc = @(lambda) lambda * 3;
     end
-
+    
+    disp("TM");
     %%%%%%%%%%%%%%%%%%%%%%%%%%%
     %%% PEC cylinder, TM_z  %%%
     %%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -77,6 +80,7 @@ for k = 1:numel(sweep)
     
     a = a.assemble();
     
+    disp("TE");
     %%%%%%%%%%%%%%%%%%%%%%%%%%%
     %%% PEC cylinder, TE_z  %%%
     %%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -186,19 +190,19 @@ for k = 1:numel(sweep)
     
     % CASE 1: TMz PEC
     k0 = properties_a{4}; R = properties_a{8};
-    sigma_simulated  = simulated_echo_width(a, properties_a, 0.05, 360, 10);
+    sigma_simulated  = simulated_echo_width(a, properties_a, 0.9*geo_b, 360, 10);
     sigma_analytical = bistatic_echo_width_tm_pec(angle, k0, R);
     RMSE_TM_PEC{k} = sqrt(sum((sigma_simulated(:) - sigma_analytical(:)).^2)) ./ sqrt(sum(sigma_analytical(:).^2));
     
     % CASE 2: TEz PEC
     k0 = properties_b{4}; R = properties_b{8};
-    sigma_simulated  = simulated_echo_width(b, properties_b, 0.05, 360, 10);
+    sigma_simulated  = simulated_echo_width(b, properties_b, 0.9*geo_b, 360, 10);
     sigma_analytical = bistatic_echo_width_te_pec(angle, k0, R);
     RMSE_TE_PEC{k} = sqrt(sum((sigma_simulated(:) - sigma_analytical(:)).^2)) ./ sqrt(sum(sigma_analytical(:).^2));
     
     % CASE 3: TMz Dielectric
     k0 = properties_c{4}; R = properties_c{8}; eps_r = properties_c{10};
-    sigma_simulated  = simulated_echo_width(c, properties_c, 0.05, 360, 10);
+    sigma_simulated  = simulated_echo_width(c, properties_c, 0.9*geo_b, 360, 10);
     sigma_analytical = bistatic_echo_width_tm_eps(angle, k0, R, eps_r);
     RMSE_TM_Diel{k} = sqrt(sum((sigma_simulated(:) - sigma_analytical(:)).^2)) ./ sqrt(sum(sigma_analytical(:).^2));
     
